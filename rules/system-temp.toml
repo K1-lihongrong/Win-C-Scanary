@@ -1,0 +1,26 @@
+id          = "system-temp"
+name        = "系统临时文件"
+risk        = "low"
+disclaimer  = "清理用户 TEMP 和 Windows Temp 目录。正在被占用的文件会自动跳过，不影响运行中的程序。所有文件进入回收站，可恢复。"
+
+detect = [
+  "%TEMP%",
+  "%WINDIR%/Temp",
+]
+
+[[scope]]
+id       = "user-temp"
+label    = "用户临时文件夹 (%TEMP%)"
+glob     = "%TEMP%/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "windows-temp"
+label    = "Windows 临时文件夹"
+glob     = "%WINDIR%/Temp/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+prompt   = { kind = "confirm", label = "清理 Windows Temp 可能需要管理员权限，确认继续？" }

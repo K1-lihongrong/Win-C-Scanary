@@ -1,0 +1,53 @@
+id          = "browser-cache"
+name        = "浏览器缓存"
+risk        = "low"
+disclaimer  = "只清浏览器缓存（网页资源、脚本、GPU 缓存），不碰书签/密码/历史/扩展/cookies。登录状态不受影响。文件进入回收站，可恢复。"
+
+detect = [
+  "%LOCALAPPDATA%/Google/Chrome/User Data",
+  "%LOCALAPPDATA%/Microsoft/Edge/User Data",
+]
+
+[match]
+name_contains   = ["User Data"]
+must_have_child = ["Default"]
+
+[[scope]]
+id       = "chrome-cache"
+label    = "Chrome 缓存"
+glob     = "%LOCALAPPDATA%/Google/Chrome/User Data/*/Cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "chrome-code-cache"
+label    = "Chrome Code Cache"
+glob     = "%LOCALAPPDATA%/Google/Chrome/User Data/*/Code Cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "chrome-gpu-cache"
+label    = "Chrome GPU 缓存"
+glob     = "%LOCALAPPDATA%/Google/Chrome/User Data/*/GPUCache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "edge-cache"
+label    = "Edge 缓存"
+glob     = "%LOCALAPPDATA%/Microsoft/Edge/User Data/*/Cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "edge-code-cache"
+label    = "Edge Code Cache"
+glob     = "%LOCALAPPDATA%/Microsoft/Edge/User Data/*/Code Cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"

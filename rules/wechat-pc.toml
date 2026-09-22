@@ -1,0 +1,26 @@
+id          = "wechat-pc"
+name        = "微信 PC 缓存"
+risk        = "medium"
+disclaimer  = "只清微信 PC 端的临时缓存（图片/视频/文件预览缓存）。严格不碰聊天记录、账号数据、收藏。清理后重新打开聊天会重新下载媒体文件。文件进入回收站，可恢复。"
+
+detect = [
+  "%APPDATA%/Tencent/WeChat",
+  "%USERPROFILE%/Documents/WeChat Files",
+]
+
+[[scope]]
+id       = "wechat-cache"
+label    = "微信缓存 (FileStorage/Cache)"
+glob     = "%USERPROFILE%/Documents/WeChat Files/*/FileStorage/Cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "wechat-video-cache"
+label    = "微信视频缓存 (FileStorage/Video)"
+glob     = "%USERPROFILE%/Documents/WeChat Files/*/FileStorage/Video/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+prompt   = { kind = "confirm", label = "清理视频缓存后需重新下载历史视频，确认继续？" }

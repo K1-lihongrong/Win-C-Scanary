@@ -1,0 +1,34 @@
+id          = "conda"
+name        = "Conda 缓存"
+risk        = "low"
+disclaimer  = "清理 conda 包缓存（下载的 .tar.bz2/.conda 包）。不影响已安装的 env。删除后重新安装包会重新下载。文件进入回收站，可恢复。"
+
+detect = [
+  "%USERPROFILE%/anaconda3/pkgs",
+  "%USERPROFILE%/miniconda3/pkgs",
+  "%LOCALAPPDATA%/conda/conda/pkgs",
+]
+
+[[scope]]
+id       = "conda-pkgs-anaconda"
+label    = "Conda 包缓存 (anaconda3)"
+glob     = "%USERPROFILE%/anaconda3/pkgs/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "conda-pkgs-miniconda"
+label    = "Conda 包缓存 (miniconda3)"
+glob     = "%USERPROFILE%/miniconda3/pkgs/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "conda-pkgs-local"
+label    = "Conda 包缓存 (Local)"
+glob     = "%LOCALAPPDATA%/conda/conda/pkgs/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"

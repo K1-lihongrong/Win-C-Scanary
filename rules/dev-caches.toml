@@ -1,0 +1,44 @@
+id          = "dev-caches"
+name        = "开发工具缓存"
+risk        = "low"
+disclaimer  = "清理 pip / cargo / maven / gradle 的包缓存。这些是下载缓存，删除后下次构建会重新下载（首次变慢）。不影响已安装的包和项目源码。文件进入回收站，可恢复。"
+
+detect = [
+  "%LOCALAPPDATA%/pip/Cache",
+  "%USERPROFILE%/.cargo/registry/cache",
+  "%USERPROFILE%/.m2/repository",
+  "%USERPROFILE%/.gradle/caches",
+]
+
+[[scope]]
+id       = "pip-cache"
+label    = "pip 下载缓存"
+glob     = "%LOCALAPPDATA%/pip/Cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "cargo-registry-cache"
+label    = "Cargo registry 缓存"
+glob     = "%USERPROFILE%/.cargo/registry/cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "maven-repo"
+label    = "Maven 本地仓库 (.m2)"
+glob     = "%USERPROFILE%/.m2/repository/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+prompt   = { kind = "confirm", label = "清理 Maven 本地仓库会导致下次构建重新下载依赖，确认继续？" }
+
+[[scope]]
+id       = "gradle-caches"
+label    = "Gradle 缓存"
+glob     = "%USERPROFILE%/.gradle/caches/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"

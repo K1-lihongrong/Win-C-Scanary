@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Win-C-Scanary</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; background: #f5f6f8; color: #1f2430; }
+  header { background: #1f2937; color: #fff; padding: 14px 22px; display: flex; align-items: center; gap: 14px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .sub { font-size: 12px; color: #9ca3af; }
+  nav { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 22px; display: flex; gap: 4px; }
+  nav button { border: none; background: none; padding: 12px 16px; font-size: 14px; cursor: pointer; color: #6b7280; border-bottom: 2px solid transparent; }
+  nav button.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+  main { padding: 22px; max-width: 1080px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 140px; }
+  .stat .label { font-size: 12px; color: #6b7280; }
+  .stat .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .score-A { color: #16a34a; } .score-B { color: #65a30d; } .score-C { color: #ca8a04; }
+  .score-D { color: #ea580c; } .score-F { color: #dc2626; }
+  button.primary { background: #2563eb; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; cursor: pointer; }
+  button.primary:disabled { background: #93c5fd; cursor: not-allowed; }
+  button.ghost { background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #f0f1f3; }
+  th { color: #6b7280; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge-green { background: #dcfce7; color: #166534; }
+  .badge-yellow { background: #fef9c3; color: #854d0e; }
+  .badge-red { background: #fee2e2; color: #991b1b; }
+  .muted { color: #6b7280; font-size: 13px; }
+  .msg { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 13px; background: #eff6ff; color: #1e40af; }
+  .msg.err { background: #fef2f2; color: #991b1b; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 8px; overflow: auto; font-size: 12px; max-height: 360px; }
+  input[type=text] { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; width: 280px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #93c5fd; border-top-color: #2563eb; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; }
+  .bar-row:hover { opacity: .8; }
+  .bar-label { width: 90px; font-size: 13px; }
+  .bar-track { flex: 1; height: 22px; background: #f0f1f3; border-radius: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; transition: width .4s; }
+  .bar-fill.green { background: #22c55e; }
+  .bar-fill.yellow { background: #eab308; }
+  .bar-fill.red { background: #ef4444; }
+  .bar-val { width: 90px; text-align: right; font-size: 13px; color: #374151; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Win-C-Scanary</h1>
+  <span class="sub">规则驱动 · 安全优先的 C 盘清理引擎</span>
+</header>
+<nav>
+  <button data-tab="home" class="active">首页</button>
+  <button data-tab="clean">可清理</button>
+  <button data-tab="exec">执行</button>
+  <button data-tab="route">分流</button>
+  <button data-tab="grow">增长</button>
+  <button data-tab="logs">日志</button>
+</nav>
+<main>
+  <!-- 首页 -->
+  <section id="tab-home">
+    <div class="card">
+      <div class="row">
+        <div class="stat"><div class="label">C 盘健康评分</div><div class="value" id="health-score">—</div></div>
+        <div class="stat"><div class="label">等级</div><div class="value" id="health-grade">—</div></div>
+        <div class="stat"><div class="label">已用</div><div class="value" id="health-used">—</div></div>
+        <div class="stat"><div class="label">可用</div><div class="value" id="health-free">—</div></div>
+      </div>
+      <div class="muted" id="health-advice" style="margin-top:10px"></div>
+      <div style="margin-top:14px">
+        <button class="primary" id="btn-health">加载健康报告</button>
+        <span id="health-spin"></span>
+      </div>
+      <div id="health-msg"></div>
+    </div>
+    <div class="card" id="card-space" style="display:none">
+      <h3 style="margin-top:0">空间核算（逻辑 vs 实际分配）</h3>
+      <div class="row">
+        <div class="stat"><div class="label">逻辑大小</div><div class="value" id="space-logical">—</div></div>
+        <div class="stat"><div class="label">实际分配</div><div class="value" id="space-alloc">—</div></div>
+        <div class="stat"><div class="label">簇对齐浪费</div><div class="value" id="space-waste">—</div></div>
+      </div>
+      <div class="muted" id="space-note" style="margin-top:8px"></div>
+      <table id="space-dirs" style="margin-top:10px"><thead><tr><th>目录</th><th>本层浪费</th><th>累计浪费</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">可清理分级</h3>
+      <div id="grade-bars"></div>
+      <div class="muted" style="margin-top:10px">加载健康报告后显示。点击任一色条查看对应规则明细。</div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">大目录概览</h3>
+      <table id="topdirs"><thead><tr><th>目录</th><th>大小</th><th>文件数</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <!-- 可清理 -->
+  <section id="tab-clean" style="display:none">
+    <div class="card">
+      <div class="row" style="align-items:center">
+        <button class="primary" id="btn-rules">扫描分级</button>
+        <span class="muted">按风险分级：GREEN 可直接清理 · YELLOW 需确认 · RED 仅展示</span>
+      </div>
+      <div id="rules-msg"></div>
+    </div>
+    <div class="card">
+      <table id="rules"><thead><tr><th>规则</th><th>名称</th><th>风险</th><th>可清理</th><th>命中</th><th>操作</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <!-- 执行 -->
+  <section id="tab-exec" style="display:none">
+    <div class="card">
+      <h3 style="margin-top:0">预览与执行</h3>
+      <div class="row" style="align-items:center;gap:10px">
+        <input type="text" id="exec-path" placeholder="要清理的根路径，如 C:\\Users\\me\\AppData\\Local\\Temp">
+        <button class="ghost" id="btn-preview">预览命中</button>
+      </div>
+      <div id="exec-msg"></div>
+      <div id="preview-result"></div>
+    </div>
+  </section>
+
+  <!-- 分流 -->
+  <section id="tab-route" style="display:none">
+    <div class="card">
+      <h3 style="margin-top:0">复杂项请交给 Agent</h3>
+      <p class="muted">以下场景 GUI 不处理，建议用 Agent 分析（DESIGN.md H1：GUI 不放 AI）：</p>
+      <ul class="muted">
+        <li>空间增长归因（哪个目录在持续变大）</li>
+        <li>缓存/软件迁移方案设计</li>
+        <li>卸载风险评估</li>
+        <li>RED（高风险）项的处置决策</li>
+      </ul>
+      <p class="muted">在 Agent 中直接描述需求，例如点击下面命令复制后粘贴到 Agent：</p>
+      <div id="agent-cmds"></div>
+    </div>
+  </section>
+
+  <!-- 增长 -->
+  <section id="tab-grow" style="display:none">
+    <div class="card">
+      <h3 style="margin-top:0">增长追踪</h3>
+      <div class="row" style="align-items:center;gap:8px">
+        <button class="primary" id="btn-snap">采集快照</button>
+        <button class="ghost" id="btn-grow">查看增长</button>
+        <button class="ghost" id="btn-snap-clear">清空历史</button>
+        <span class="muted" id="snap-info">—</span>
+      </div>
+      <div id="grow-msg" style="margin-top:10px"></div>
+    </div>
+    <div class="card" id="card-grow" style="display:none">
+      <div class="row">
+        <div class="stat"><div class="label">总量变化</div><div class="value" id="grow-total">—</div></div>
+        <div class="stat"><div class="label">对比区间</div><div class="value" id="grow-range" style="font-size:14px">—</div></div>
+      </div>
+      <h4>增长最多的目录</h4>
+      <table id="grow-up"><thead><tr><th>目录</th><th>本层增长</th><th>累计</th></tr></thead><tbody></tbody></table>
+      <h4>缩小/删除最多的目录</h4>
+      <table id="grow-down"><thead><tr><th>目录</th><th>变化</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <!-- 日志 -->
+  <section id="tab-logs" style="display:none">
+    <div class="card">
+      <div class="row" style="align-items:center;gap:8px">
+        <button class="primary" id="btn-logs">刷新</button>
+        <select id="logs-level" class="ghost" style="padding:8px">
+          <option value="all">全部级别</option>
+          <option value="warn">仅 WARN/ERROR</option>
+          <option value="error">仅 ERROR</option>
+        </select>
+        <label class="muted" style="display:flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="logs-auto" checked> 自动刷新(5s)
+        </label>
+        <button class="ghost" id="btn-logs-copy">复制</button>
+        <button class="ghost" id="btn-logs-export">下载 .txt</button>
+        <button class="ghost" id="btn-logs-clear">清空</button>
+      </div>
+      <div class="muted" id="logs-info" style="margin-top:8px">后端运行日志（API 访问 + 警告/错误），排查问题用。</div>
+      <div id="logs-view" style="margin-top:12px"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = async (method, path, body) => {
+  const opt = { method, headers: {} };
+  if (body) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (!r.ok) throw new Error(path + " → HTTP " + r.status);
+  return r.json();
+};
+const fmtGB = (b) => (b / 1e9).toFixed(2) + " GB";
+const riskBadge = (r) => {
+  const map = { low: ["green","GREEN"], medium: ["yellow","YELLOW"], high: ["red","RED"] };
+  const [cls, txt] = map[r] || ["yellow", r];
+  return '<span class="badge badge-' + cls + '">' + txt + '</span>';
+};
+
+// tab 切换
+document.querySelectorAll("nav button").forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll("nav button").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    ["home","clean","exec","route","grow","logs"].forEach((t) => {
+      $("tab-" + t).style.display = (t === b.dataset.tab) ? "" : "none";
+    });
+    if (b.dataset.tab === "grow") loadSnapshotInfo();
+  };
+});
+
+// 首页：健康报告
+$("btn-health").onclick = async () => {
+  const spin = $("health-spin"); spin.innerHTML = '<span class="spinner"></span>';
+  $("health-msg").innerHTML = "";
+  try {
+    const rep = await api("GET", "/api/health");
+    const h = rep.health;
+    $("health-score").textContent = h.score;
+    $("health-score").className = "value score-" + h.grade;
+    $("health-grade").textContent = h.grade;
+    $("health-used").textContent = h.used_percent.toFixed(1) + "%";
+    $("health-free").textContent = h.free_gb.toFixed(1) + " GB";
+    $("health-advice").textContent = h.advice;
+    renderGradeBars(rep.summary);
+    renderSpaceAudit(rep.space_audit);
+    const tb = $("topdirs").querySelector("tbody"); tb.innerHTML = "";
+    (rep.top_dirs || []).forEach((d) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + d.name + "</td><td>" + fmtGB(d.size) + "</td><td>" + (d.file_count ?? "—") + "</td>";
+      tb.appendChild(tr);
+    });
+  } catch (e) {
+    $("health-msg").innerHTML = '<div class="msg err">' + e.message + '</div>';
+  } finally { spin.innerHTML = ""; }
+};
+
+// 可清理：规则列表
+$("btn-rules").onclick = async () => {
+  $("rules-msg").innerHTML = '<div class="msg">扫描中（全盘 MFT，约 5 秒）…</div>';
+  try {
+    const grades = await api("GET", "/api/grade");
+    const tb = $("rules").querySelector("tbody"); tb.innerHTML = "";
+    // 按可清理量降序
+    grades.sort((a, b) => b.bytes - a.bytes);
+    grades.forEach((g) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + g.rule_id + "</td><td>" + g.name + "</td><td>" + riskBadge(g.risk) +
+        "</td><td>" + fmtGB(g.bytes) + "</td><td class='muted'>" + g.dir_count + " 目录</td><td></td>";
+      const btn = document.createElement("button");
+      btn.className = "ghost"; btn.textContent = "预览";
+      btn.onclick = () => {
+        // 预填规则的示例路径（detect 首项），避免执行页路径为空
+        if (g.sample_path) $("exec-path").value = g.sample_path;
+        selectTab("exec");
+        previewRule(g.rule_id);
+      };
+      tr.lastElementChild.appendChild(btn);
+      tb.appendChild(tr);
+    });
+    const total = grades.reduce((s, g) => s + g.bytes, 0);
+    $("rules-msg").innerHTML = '<div class="msg">共 ' + grades.length + ' 条规则，可清理合计 <b>' + fmtGB(total) + '</b></div>';
+  } catch (e) { $("rules-msg").innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+};
+// 分流页：可复制的 Agent 命令
+(function initAgentCmds() {
+  const cmds = [
+    "帮我分析 C 盘最近增长的原因，哪个目录在持续变大",
+    "帮我把常用的开发缓存（pip/cargo/npm）迁移到 D 盘",
+    "帮我评估这几个大目录是否可以安全清理",
+    "帮我清理 C 盘临时文件和浏览器缓存（先预览再执行）",
+  ];
+  const box = $("agent-cmds");
+  if (!box) return;
+  cmds.forEach((c) => {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.style.cursor = "pointer";
+    row.innerHTML = '<code style="flex:1;background:#f3f4f6;padding:8px 12px;border-radius:6px;font-size:13px">' + c + '</code>' +
+      '<span class="muted" style="font-size:12px">点击复制</span>';
+    row.onclick = () => {
+      navigator.clipboard.writeText(c).then(() => {
+        row.querySelector("span").textContent = "已复制 ✓";
+        setTimeout(() => { row.querySelector("span").textContent = "点击复制"; }, 1500);
+      }).catch(() => {
+        row.querySelector("span").textContent = "复制失败，请手动选";
+      });
+    };
+    box.appendChild(row);
+  });
+})();
+
+// 空间核算卡片
+function renderSpaceAudit(a) {
+  const card = $("card-space");
+  if (!a) { card.style.display = "none"; return; }
+  card.style.display = "";
+  $("space-logical").textContent = fmtGB(a.logical_bytes);
+  $("space-alloc").textContent = fmtGB(a.allocated_bytes);
+  $("space-waste").textContent = fmtGB(a.waste_bytes) + " (" + (a.waste_ratio * 100).toFixed(2) + "%)";
+  $("space-note").textContent = "簇对齐浪费 = 小文件按 4KB 簇分配导致的超额占用。";
+  const tb = $("space-dirs").querySelector("tbody"); tb.innerHTML = "";
+  (a.top_waste_dirs || []).forEach((d) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td class='muted' style='font-size:12px'>" + escapeHtml(d.path) + "</td>" +
+      "<td>" + fmtGB(d.self_waste) + "</td><td class='muted'>" + fmtGB(d.waste_bytes) + "</td>";
+    tb.appendChild(tr);
+  });
+}
+
+// 三色分级条
+function renderGradeBars(summary) {
+  const items = [
+    { cls: "green", label: "GREEN 安全", gb: summary.safely_cleanable_gb },
+    { cls: "yellow", label: "YELLOW 需确认", gb: summary.needs_confirm_gb },
+    { cls: "red", label: "RED 高风险", gb: summary.high_risk_gb },
+  ];
+  const max = Math.max(0.01, ...items.map((i) => i.gb));
+  const box = $("grade-bars");
+  box.innerHTML = "";
+  items.forEach((it) => {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.title = "点击查看明细";
+    const pct = Math.max(it.gb > 0 ? 4 : 0, (it.gb / max) * 100);
+    row.innerHTML =
+      '<div class="bar-label">' + it.label + '</div>' +
+      '<div class="bar-track"><div class="bar-fill ' + it.cls + '" style="width:' + pct + '%"></div></div>' +
+      '<div class="bar-val">' + it.gb.toFixed(2) + ' GB</div>';
+    row.onclick = () => { selectTab("clean"); $("btn-rules").click(); };
+    box.appendChild(row);
+  });
+}
+
+function selectTab(t) {
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("active", x.dataset.tab === t));
+  ["home","clean","exec","route","grow","logs"].forEach((x) => { $("tab-" + x).style.display = (x === t) ? "" : "none"; });
+  if (t === "logs") loadLogs();
+  if (t === "grow") loadSnapshotInfo();
+}
+
+// 增长页
+async function loadSnapshotInfo() {
+  try {
+    const info = await api("GET", "/api/snapshot/list");
+    $("snap-info").textContent = "已有 " + info.count + " 份快照";
+  } catch (e) { $("snap-info").textContent = "读取快照状态失败"; }
+}
+$("btn-snap").onclick = async () => {
+  $("grow-msg").innerHTML = '<div class="msg">采集中…（全盘 MFT，约 5 秒）</div>';
+  try {
+    const out = await api("POST", "/api/snapshot");
+    if (!out.saved) { $("grow-msg").innerHTML = '<div class="msg err">' + out.message + '</div>'; }
+    else {
+      $("grow-msg").innerHTML = '<div class="msg">快照已保存（' + out.entries + ' 个目录）</div>';
+      loadSnapshotInfo();
+    }
+  } catch (e) { $("grow-msg").innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+};
+$("btn-snap-clear").onclick = async () => {
+  if (!confirm("清空所有历史快照？此操作不可恢复，用于新机器/重置场景。")) return;
+  try {
+    const out = await api("POST", "/api/snapshot/clear");
+    $("grow-msg").innerHTML = '<div class="msg">已清空 ' + out.cleared + ' 份快照</div>';
+    $("card-grow").style.display = "none";
+    loadSnapshotInfo();
+  } catch (e) { $("grow-msg").innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+};
+$("btn-grow").onclick = async () => {
+  try {
+    const rep = await api("GET", "/api/grow");
+    if (!rep.ready) { $("grow-msg").innerHTML = '<div class="msg err">' + rep.message + '</div>'; return; }
+    $("grow-msg").innerHTML = "";
+    $("card-grow").style.display = "";
+    const dGB = (rep.total_delta / 1e9);
+    $("grow-total").textContent = (dGB >= 0 ? "+" : "") + dGB.toFixed(2) + " GB";
+    $("grow-range").textContent = rep.from_time.slice(0, 16).replace("T", " ") + " → " + rep.to_time.slice(0, 16).replace("T", " ");
+    const up = $("grow-up").querySelector("tbody"); up.innerHTML = "";
+    (rep.top_growth || []).forEach((g) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td class='muted' style='font-size:12px'>" + escapeHtml(g.path) + "</td>" +
+        "<td style='color:#dc2626'>+" + (g.self_delta / 1e6).toFixed(1) + " MB</td>" +
+        "<td class='muted'>+" + (g.delta / 1e6).toFixed(1) + " MB</td>";
+      up.appendChild(tr);
+    });
+    const down = $("grow-down").querySelector("tbody"); down.innerHTML = "";
+    (rep.top_shrink || []).forEach((g) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td class='muted' style='font-size:12px'>" + escapeHtml(g.path) + "</td>" +
+        "<td style='color:#16a34a'>" + (g.delta / 1e6).toFixed(1) + " MB</td>";
+      down.appendChild(tr);
+    });
+  } catch (e) { $("grow-msg").innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+};
+
+// 日志页
+let lastLogs = [];      // 最近一次拉取的原始日志（供导出/复制）
+let logsTimer = null;   // 自动刷新定时器
+$("btn-logs").onclick = loadLogs;
+$("logs-level").onchange = renderLogs;
+$("logs-auto").onchange = () => { setLogsAuto($("logs-auto").checked); };
+$("btn-logs-clear").onclick = async () => {
+  try { await api("POST", "/api/logs/clear"); loadLogs(); } catch (e) { /* ignore */ }
+};
+$("btn-logs-copy").onclick = () => {
+  const text = logsToText();
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(
+    () => { $("logs-info").textContent = "已复制 " + lastLogs.length + " 条到剪贴板"; },
+    () => { $("logs-info").textContent = "复制失败，请用「下载 .txt」"; }
+  );
+};
+$("btn-logs-export").onclick = () => {
+  const blob = new Blob([logsToText()], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "scanary-gui-logs.txt";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+async function loadLogs() {
+  try {
+    lastLogs = await api("GET", "/api/logs");
+    renderLogs();
+  } catch (e) {
+    $("logs-view").innerHTML = '<div class="msg err">' + e.message + '</div>';
+  }
+}
+
+// 按级别过滤 + 渲染
+function renderLogs() {
+  const view = $("logs-view");
+  const level = $("logs-level").value;
+  let rows = lastLogs;
+  if (level === "warn") rows = lastLogs.filter((l) => l.level === "WARN" || l.level === "ERROR");
+  else if (level === "error") rows = lastLogs.filter((l) => l.level === "ERROR");
+  if (!lastLogs.length) { view.innerHTML = '<div class="muted">暂无日志。</div>'; $("logs-info").textContent = "暂无日志"; return; }
+  if (!rows.length) { view.innerHTML = '<div class="muted">当前过滤条件下无日志。</div>'; $("logs-info").textContent = "共 " + lastLogs.length + " 条，过滤后 0 条"; return; }
+  const lines = rows.map((l) => {
+    const cls = l.level === "ERROR" ? "color:#dc2626" : (l.level === "WARN" ? "color:#ca8a04" : "color:#374151");
+    return '<div style="' + cls + '">[' + fmtLogTime(l.ts_ms) + '] ' + l.level + ' ' + l.source + ' — ' + escapeHtml(l.message) + '</div>';
+  }).join("");
+  view.innerHTML = '<pre style="max-height:520px">' + lines + '</pre>';
+  $("logs-info").textContent = "共 " + lastLogs.length + " 条（显示 " + rows.length + " 条，最多保留 500 条）";
+}
+
+// MM-DD HH:MM:SS
+function fmtLogTime(ms) {
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, "0");
+  return p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
+
+// 导出为纯文本
+function logsToText() {
+  return lastLogs.map((l) => "[" + fmtLogTime(l.ts_ms) + "] " + l.level + " " + l.source + " — " + l.message).join("\n");
+}
+
+// 自动刷新开关
+function setLogsAuto(on) {
+  if (logsTimer) { clearInterval(logsTimer); logsTimer = null; }
+  if (on) logsTimer = setInterval(() => {
+    // 仅当日志 tab 可见时才刷，省资源
+    if ($("tab-logs").style.display !== "none") loadLogs();
+  }, 5000);
+}
+setLogsAuto(true); // 默认开
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// 执行：预览
+let lastRule = null;
+$("btn-preview").onclick = () => previewRule(lastRule);
+async function previewRule(ruleId) {
+  const path = $("exec-path").value.trim();
+  if (!path) { $("exec-msg").innerHTML = '<div class="msg err">请填写根路径</div>'; return; }
+  if (ruleId) lastRule = ruleId;
+  try {
+    const out = await api("POST", "/api/preview", { rule_id: lastRule, path });
+    if (out.error) { $("exec-msg").innerHTML = '<div class="msg err">' + out.error + '</div>'; return; }
+    $("exec-msg").innerHTML = '<div class="msg">规则 ' + out.rule_id + '（' + out.rule_name + '，' +
+      riskBadge(out.risk) + '）命中 <b>' + out.matched_count + '</b> 项</div>';
+    const sample = (out.matched_paths || []).slice(0, 50).join("\n");
+    $("preview-result").innerHTML = "<pre>" + (sample || "（无命中）") + "</pre>";
+    // 执行按钮：dry-run 预览 + 真实清理（需二次确认）
+    const box = document.createElement("div");
+    box.style.marginTop = "12px";
+    box.style.display = "flex"; box.style.gap = "10px";
+    const dry = document.createElement("button");
+    dry.className = "primary"; dry.textContent = "预览执行（dry-run）";
+    dry.onclick = () => executeRule(lastRule, path, true);
+    box.appendChild(dry);
+    // RED 项不提供真实清理按钮（与后端策略一致）
+    if (out.risk !== "high") {
+      const real = document.createElement("button");
+      real.className = "ghost";
+      real.style.color = "#dc2626"; real.style.borderColor = "#dc2626";
+      real.textContent = "真实清理…";
+      real.onclick = () => {
+        const ok = window.confirm(
+          "确认真实清理？\n\n规则：" + out.rule_id + "\n路径：" + path +
+          "\n命中：" + out.matched_count + " 项\n\n" +
+          "文件将进入回收站（可恢复）。此操作会真正移动文件。"
+        );
+        if (ok) executeRule(lastRule, path, false);
+      };
+      box.appendChild(real);
+    } else {
+      const note = document.createElement("span");
+      note.className = "muted";
+      note.textContent = "RED（高风险）项不提供清理，请用 Agent 分析。";
+      box.appendChild(note);
+    }
+    $("preview-result").appendChild(box);
+  } catch (e) { $("exec-msg").innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+async function executeRule(ruleId, path, dryRun) {
+  $("exec-msg").innerHTML = '<div class="msg">' + (dryRun ? "预览执行中…" : "清理中…") + '</div>';
+  try {
+    const out = await api("POST", "/api/execute", { rule_id: ruleId, path, dry_run: dryRun, confirm: !dryRun });
+    if (out.executed === false) {
+      $("exec-msg").innerHTML = '<div class="msg err">' + (out.message || "未执行") + '</div>';
+    } else {
+      const label = dryRun ? "dry-run 预览" : "已清理";
+      const freed = out.total_bytes != null ? ("，释放 " + fmtGB(out.total_bytes)) : "";
+      $("exec-msg").innerHTML = '<div class="msg">' + label + freed + (dryRun ? "（未真正删除）" : "") + '</div>';
+    }
+    $("preview-result").innerHTML = "<pre>" + JSON.stringify(out, null, 2) + "</pre>";
+  } catch (e) { $("exec-msg").innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+</script>
+</body>
+</html>

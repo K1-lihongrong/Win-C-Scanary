@@ -1,0 +1,18 @@
+[package]
+name        = "wcs-dedup"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+description = "重复文件检测（三阶段哈希，只读）"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+walkdir.workspace = true
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

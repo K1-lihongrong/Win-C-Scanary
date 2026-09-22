@@ -1,0 +1,43 @@
+# ============================================================
+# 规则模板（rule.toml）
+# ------------------------------------------------------------
+# 复制本文件到 rules/<id>.toml，改字段即可。加规则不改代码。
+#
+# 【安全红线】任何 scope.glob 都不得命中 crates/scaffold/src/lib.rs
+# 里的 RED_LINE_PATTERNS（*.db / **/db_storage/** / **/Msg/** /
+# **/Accounts/** / **/login/** / **/Favorite*/** / **/key/** /
+# **/crypto/** / **/.git/** / **/.vscode/** / **/JetBrains/**），
+# 否则加载时直接拒绝（validate_red_lines）。
+#
+# 【必须配 safety test】复制 crates/scaffold/tests/_templates/
+# rule_safety.rs 到 crates/scaffold/tests/<id>_safety.rs，
+# 写正向断言（scope 至少一条命中）+ 红线断言（红线路径零命中）。
+# ============================================================
+
+id          = "<rule-id>"            # 唯一标识，kebab-case
+name        = "<人类可读名称>"
+risk        = "low"                  # low | medium | high（分级汇总用）
+disclaimer  = "<清理影响说明：删什么、是否可恢复、会不会影响运行中的程序>"
+
+# detect：用于按路径自动识别"这是什么目录"（供 Agent 判断；也用于 GUI 预填）
+# 支持环境变量：%VAR% / $VAR / ${VAR}；末尾可用 /**
+detect = [
+  "%LOCALAPPDATA%/<app>/<cache-dir>",
+]
+
+# [match]（可选）：按目录名 + 必需子目录匹配，用于无法用固定路径表达的场景
+# [match]
+# name_contains   = ["User Data"]
+# must_have_child = ["Default"]
+
+# [[scope]]：一个规则可有多个清理范围，每个范围独立 id/glob/mode
+[[scope]]
+id       = "<scope-id>"
+label    = "<范围说明>"
+glob     = "%LOCALAPPDATA%/<app>/<cache-dir>/**"
+mode     = "recycle"                 # recycle（默认，可恢复）| quarantine | delete | system_cmd
+category = "cache"                   # 分类标签（如 cache / log）
+recycle_granularity = "file"         # file（逐文件）| directory（整目录）
+# prompt  = { kind = "confirm", label = "确认继续？" }   # 交互提示（可选）
+#   kind: none | days | bytes | choice | confirm
+#   例：{ kind = "days", default = 7, label = "保留最近几天？" }

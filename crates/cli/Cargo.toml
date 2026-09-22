@@ -1,0 +1,29 @@
+[package]
+name        = "wcs-cli"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+description = "命令行入口"
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+dirs.workspace = true
+wcs-scanner = { path = "../scanner" }
+wcs-dedup = { path = "../dedup" }
+wcs-inventory = { path = "../inventory" }
+wcs-scaffold = { path = "../scaffold" }
+wcs-guard = { path = "../guard" }
+wcs-executor = { path = "../executor" }
+wcs-report = { path = "../report" }
+wcs-growth = { path = "../growth" }
+tiny_http.workspace = true
+tracing-subscriber.workspace = true
+
+[[bin]]
+name = "scanary"
+path = "src/main.rs"

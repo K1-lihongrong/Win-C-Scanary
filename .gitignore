@@ -1,0 +1,38 @@
+# 编译产物
+/target/
+**/target/
+
+# 运行产物
+undo.jsonl
+quarantine/
+*.tmp
+
+# 命令输出重定向产物
+scan.json
+report.json
+*.out
+
+# MFT 调试输出
+mft_out.txt
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.cuckooCode/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# 内部文档（不公开）
+docs/HANDOFF-PARALLEL.md
+docs/HANDOFF-PROMPTS.md
+docs/VERIFY-AGENT-LOAD.md
+docs/MFT-MEMORY-ISSUE.md
+docs/VERIFICATION-RESULT.md
+docs/VERIFICATION-TASKS.md
+docs/archive/
+
+# 分发包（走 GitHub Release 附件，不进仓库）
+*.zip

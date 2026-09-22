@@ -1,0 +1,20 @@
+[package]
+name        = "wcs-executor"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+description = "执行引擎（回收站/隔离/删除 + undo）"
+
+[dev-dependencies]
+tempfile = "3"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+trash.workspace = true
+chrono.workspace = true
+wcs-guard = { path = "../guard" }

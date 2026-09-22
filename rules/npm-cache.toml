@@ -1,0 +1,25 @@
+id          = "npm-cache"
+name        = "npm 缓存"
+risk        = "low"
+disclaimer  = "清理 npm 包缓存。下次安装依赖时会重新下载（首次会变慢）。不影响已安装的 node_modules。文件进入回收站，可恢复。"
+
+detect = [
+  "%APPDATA%/npm-cache",
+  "%LOCALAPPDATA%/npm-cache",
+]
+
+[[scope]]
+id       = "npm-cache-roaming"
+label    = "npm 缓存 (Roaming)"
+glob     = "%APPDATA%/npm-cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"
+
+[[scope]]
+id       = "npm-cache-local"
+label    = "npm 缓存 (Local)"
+glob     = "%LOCALAPPDATA%/npm-cache/**"
+mode     = "recycle"
+category = "cache"
+recycle_granularity = "file"

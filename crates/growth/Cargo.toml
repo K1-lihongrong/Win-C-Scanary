@@ -1,0 +1,15 @@
+[package]
+name        = "wcs-growth"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+description = "增长追踪（快照采集/存储/对比）"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+wcs-scanner = { path = "../scanner" }
