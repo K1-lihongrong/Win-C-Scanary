@@ -15,7 +15,7 @@ members = [
 [workspace.package]
 edition    = "2021"
 license    = "MIT"
-repository = "https://github.com/YOUR-USERNAME/Win-C-Scanary"
+repository = "https://github.com/K1-lihongrong/Win-C-Scanary"
 version    = "0.1.0"
 
 [workspace.dependencies]
