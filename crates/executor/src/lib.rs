@@ -75,6 +75,32 @@ pub fn execute(
     undo_log: &Path,
     quarantine_root: &Path,
 ) -> anyhow::Result<ExecResult> {
+    // 兼容入口：Warn 默认拦截（allow_warn=false），Delete 默认拒绝（allow_delete=false）。
+    execute_with(
+        plan,
+        guard_cfg,
+        dry_run,
+        undo_log,
+        quarantine_root,
+        false,
+        false,
+    )
+}
+
+/// 带显式放行开关的执行（M1）。
+///
+/// - `allow_warn`：Verdict::Warn（用户数据区）默认拦截，置 true 才放行。
+/// - `allow_delete`：Action::Delete 默认拒绝（不可逆），置 true 才执行。
+#[allow(clippy::too_many_arguments)]
+pub fn execute_with(
+    plan: &Plan,
+    guard_cfg: &GuardConfig,
+    dry_run: bool,
+    undo_log: &Path,
+    quarantine_root: &Path,
+    allow_warn: bool,
+    allow_delete: bool,
+) -> anyhow::Result<ExecResult> {
     let session_id = new_session_id();
     let mut allowed: Vec<PathBuf> = Vec::new();
     let mut blocked: Vec<(PathBuf, String)> = Vec::new();
@@ -85,10 +111,20 @@ pub fn execute(
                 blocked.push((p.clone(), r.reason.unwrap_or_default()));
             }
             r if r.verdict == Verdict::Warn => {
-                // 用户数据区：executor 不强制拦截（安全依赖调用方/Agent 遵守"先确认"铁律）。
-                // 这里记录警告，便于排查；默认 dry-run + 预览先行是主要防线。
-                tracing::warn!("用户数据区（需确认）: {}", p.display());
-                allowed.push(p.clone());
+                // 用户数据区：默认拦截（M1）。需调用方显式 allow_warn=true 才放行。
+                // 安全不依赖自觉：默认路径下 Warn 项永不被删除。
+                if allow_warn {
+                    tracing::warn!("用户数据区（allow_warn 已显式放行）: {}", p.display());
+                    allowed.push(p.clone());
+                } else {
+                    blocked.push((
+                        p.clone(),
+                        format!(
+                            "用户数据区需显式放行（--allow-warn）: {}",
+                            r.reason.unwrap_or_default()
+                        ),
+                    ));
+                }
             }
             _ => allowed.push(p.clone()),
         }
@@ -135,60 +171,100 @@ pub fn execute(
 
     match plan.action {
         Action::Recycle => {
-            // 删除前统计每项大小（删除后无法再算）
-            let sizes: Vec<u64> = allowed.iter().map(|p| path_size(p)).collect();
-            total_bytes = sizes.iter().sum();
-            trash::delete_all(&allowed)?;
-            for (p, freed) in allowed.iter().zip(sizes) {
-                entries.push(UndoEntry {
-                    timestamp: now(),
-                    session_id: session_id.clone(),
-                    action: Action::Recycle,
-                    source: p.clone(),
-                    destination: None,
-                    reason: plan.reason.clone(),
-                    bytes_freed: freed,
-                });
+            // L3：逐个删除。某个文件被占用/锁定不应拖垮整批——
+            // 跳过失败项并如实报告，与 disclaimer「占用文件自动跳过」一致。
+            for p in &allowed {
+                // 删除前统计大小（删除后无法再算）
+                let freed = path_size(p);
+                match trash::delete(p) {
+                    Ok(()) => {
+                        total_bytes += freed;
+                        entries.push(UndoEntry {
+                            timestamp: now(),
+                            session_id: session_id.clone(),
+                            action: Action::Recycle,
+                            source: p.clone(),
+                            destination: None,
+                            reason: plan.reason.clone(),
+                            bytes_freed: freed,
+                        });
+                    }
+                    Err(e) => {
+                        blocked.push((p.clone(), format!("Recycle 跳过（可能被占用）: {}", e)));
+                    }
+                }
             }
         }
         Action::Quarantine => {
             std::fs::create_dir_all(quarantine_root)?;
             for src in &allowed {
-                let freed = path_size(src);
-                total_bytes += freed;
                 let stamp = chrono::Utc::now().timestamp_millis();
-                let leaf = src.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "item".into());
+                let leaf = src
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "item".into());
                 let dst = quarantine_root.join(format!("{}-{}", stamp, leaf));
-                std::fs::rename(src, &dst).ok();
-                entries.push(UndoEntry {
-                    timestamp: now(),
-                    session_id: session_id.clone(),
-                    action: Action::Quarantine,
-                    source: src.clone(),
-                    destination: Some(dst),
-                    reason: plan.reason.clone(),
-                    bytes_freed: freed,
-                });
+                match std::fs::rename(src, &dst) {
+                    Ok(()) => {
+                        // 成功后才统计释放量、写 undo（L2：失败不夸大释放量）。
+                        let freed = path_size(&dst);
+                        total_bytes += freed;
+                        entries.push(UndoEntry {
+                            timestamp: now(),
+                            session_id: session_id.clone(),
+                            action: Action::Quarantine,
+                            source: src.clone(),
+                            destination: Some(dst),
+                            reason: plan.reason.clone(),
+                            bytes_freed: freed,
+                        });
+                    }
+                    Err(e) => {
+                        blocked.push((src.clone(), format!("Quarantine 失败: {}", e)));
+                    }
+                }
             }
         }
         Action::Delete => {
-            for p in &allowed {
-                let freed = path_size(p);
-                total_bytes += freed;
-                if p.is_dir() {
-                    std::fs::remove_dir_all(p).ok();
-                } else if p.exists() {
-                    std::fs::remove_file(p).ok();
+            // Delete 不可逆：默认拒绝（M1 扩展）。需显式 allow_delete 才执行。
+            if !allow_delete {
+                for p in &allowed {
+                    blocked.push((
+                        p.clone(),
+                        "Delete 不可逆，需显式 --allow-delete 才执行".into(),
+                    ));
                 }
-                entries.push(UndoEntry {
-                    timestamp: now(),
-                    session_id: session_id.clone(),
-                    action: Action::Delete,
-                    source: p.clone(),
-                    destination: None,
-                    reason: plan.reason.clone(),
-                    bytes_freed: freed,
-                });
+            } else {
+                let mut failed: Vec<(PathBuf, String)> = Vec::new();
+                for p in &allowed {
+                    let freed = path_size(p);
+                    let res = if p.is_dir() {
+                        std::fs::remove_dir_all(p)
+                    } else if p.exists() {
+                        std::fs::remove_file(p)
+                    } else {
+                        Ok(())
+                    };
+                    match res {
+                        Ok(()) => {
+                            total_bytes += freed;
+                            entries.push(UndoEntry {
+                                timestamp: now(),
+                                session_id: session_id.clone(),
+                                action: Action::Delete,
+                                source: p.clone(),
+                                destination: None,
+                                reason: plan.reason.clone(),
+                                bytes_freed: freed,
+                            });
+                        }
+                        Err(e) => {
+                            // L2 同款：失败不计数、不写 undo，如实报告。
+                            failed.push((p.clone(), format!("Delete 失败: {}", e)));
+                        }
+                    }
+                }
+                blocked.extend(failed);
             }
         }
         Action::SystemCmd => {
@@ -281,6 +357,109 @@ pub fn prune_quarantine(root: &Path, max_age_days: u64) -> anyhow::Result<usize>
         }
     }
     Ok(removed)
+}
+
+/// 单次 restore 的结果。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestoreResult {
+    pub session_id: String,
+    pub restored: Vec<(PathBuf, PathBuf)>,
+    pub skipped: Vec<(PathBuf, String)>,
+}
+
+/// 恢复一次会话的隔离项（Quarantine → 移回原位）。
+///
+/// - 只处理 `action == Quarantine` 且 `destination` 存在的条目。
+/// - 目标已被占用（原位有文件）时跳过，不覆盖。
+/// - Recycle / Delete 条目明确跳过并在 skipped 里给出原因。
+pub fn restore_session(
+    undo_log: &Path,
+    session_id: &str,
+) -> anyhow::Result<RestoreResult> {
+    let entries = read_undo_log(undo_log)?;
+    let mut restored: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut skipped: Vec<(PathBuf, String)> = Vec::new();
+
+    for e in entries.iter().filter(|e| e.session_id == session_id) {
+        match e.action {
+            Action::Quarantine => {
+                let dst = match &e.destination {
+                    Some(d) => d.clone(),
+                    None => {
+                        skipped.push((e.source.clone(), "无隔离目标路径".into()));
+                        continue;
+                    }
+                };
+                if !dst.exists() {
+                    skipped.push((e.source.clone(), "隔离文件已不存在".into()));
+                    continue;
+                }
+                if e.source.exists() {
+                    skipped.push((e.source.clone(), "原位已被占用，不覆盖".into()));
+                    continue;
+                }
+                if let Some(parent) = e.source.parent() {
+                    std::fs::create_dir_all(parent).ok();
+                }
+                match std::fs::rename(&dst, &e.source) {
+                    Ok(()) => restored.push((e.source.clone(), dst)),
+                    Err(err) => skipped.push((
+                        e.source.clone(),
+                        format!("恢复失败: {}", err),
+                    )),
+                }
+            }
+            Action::Recycle => skipped.push((
+                e.source.clone(),
+                "Recycle 项请从回收站恢复（本工具不代为还原）".into(),
+            )),
+            Action::Delete => skipped.push((
+                e.source.clone(),
+                "Delete 不可逆，无法恢复".into(),
+            )),
+            Action::SystemCmd => {}
+        }
+    }
+
+    Ok(RestoreResult {
+        session_id: session_id.to_string(),
+        restored,
+        skipped,
+    })
+}
+
+/// 按会话 id 聚合 undo 日志中的条目，便于 `scanary undo` 列表展示。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UndoSession {
+    pub session_id: String,
+    pub action: Action,
+    pub count: usize,
+    pub total_bytes: u64,
+    pub timestamp: String,
+}
+
+/// 列出 undo 日志中的所有会话（按出现顺序，同会话合并）。
+pub fn list_sessions(path: &Path) -> anyhow::Result<Vec<UndoSession>> {
+    let entries = read_undo_log(path)?;
+    let mut out: Vec<UndoSession> = Vec::new();
+    for e in entries {
+        if e.reason.contains("dry-run") {
+            continue; // dry-run 不算可恢复会话
+        }
+        if let Some(s) = out.iter_mut().find(|s| s.session_id == e.session_id) {
+            s.count += 1;
+            s.total_bytes += e.bytes_freed;
+        } else {
+            out.push(UndoSession {
+                session_id: e.session_id.clone(),
+                action: e.action,
+                count: 1,
+                total_bytes: e.bytes_freed,
+                timestamp: e.timestamp.clone(),
+            });
+        }
+    }
+    Ok(out)
 }
 
 pub fn read_undo_log(path: &Path) -> anyhow::Result<Vec<UndoEntry>> {

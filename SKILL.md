@@ -1,7 +1,7 @@
 ---
 name: win-c-scanary
 description: 安全扫描并清理 Windows C 盘空间。基于规则驱动（规则即 TOML，可扩展），默认回收站、fail-closed 门禁、预览先行。覆盖系统临时文件、浏览器缓存、npm/pip/cargo/maven/gradle/conda 缓存、微信 PC 缓存；并提供重复文件检测、软件清单/卸载指导、空间核算、增长追踪、迁移指导、休眠/页面文件、系统级清理（后三者为指导型，只给命令不执行）。当用户提到 C盘清理、磁盘清理、空间不足、C盘满了、disk cleanup、free up space、clean disk、storage full、释放空间、垃圾文件、清理缓存、查重、重复文件、迁移缓存、关闭休眠、WinSxS、卸载软件，或要求查找磁盘上的垃圾/临时/缓存文件时触发。
-version: 0.1.0
+version: 0.1.1
 ---
 
 # Win-C-Scanary
@@ -38,11 +38,16 @@ scanary --rules-dir rules rules
 # 4. 预览某规则会命中什么（dry-run，不删）
 scanary --rules-dir rules preview npm-cache "%APPDATA%\npm-cache"
 
-# 5. 执行清理（默认 --dry-run=true；确认后才 --dry-run=false）
-scanary --rules-dir rules execute system-temp "%TEMP%" --dry-run=false
+# 5. 执行清理（默认 dry-run；真删必须显式 --commit）
+#    真删前会按规则 prompt 交互确认（非 TTY 会拒绝）
+scanary --rules-dir rules execute system-temp "%TEMP%" --commit
 
 # 6. 健康报告 + 释放量
 scanary report "C:\"
+
+# 6.5 撤销：查看历史会话 / 恢复隔离项
+scanary undo                    # 列出可恢复会话
+scanary restore <session_id>    # 隔离项移回原位（Recycle 用回收站，Delete 不可逆）
 
 # 7. 进阶：重复文件检测（只检测不删）
 scanary dedup "C:\Users\me\Downloads" --min-size 1024

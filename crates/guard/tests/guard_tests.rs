@@ -27,6 +27,30 @@ fn passed(p: &str) -> bool {
 }
 
 #[test]
+fn protect_c_drive_boundary_toggle() {
+    // 关闭边界保护时，C 盘根仍会因 is_forbidden_root 被拦（双重保险）。
+    // 这里验证的是：开启时（默认）给出的是边界保护的理由。
+    let cfg_on = GuardConfig {
+        allowed_roots: vec![PathBuf::from("C:\\")],
+        protect_c_drive_boundary: true,
+        reject_reparse_points: false,
+        extra_protected: Vec::new(),
+    };
+    let r = check_path(std::path::Path::new("C:\\"), &cfg_on);
+    assert_eq!(r.verdict, Verdict::Block);
+
+    // 关闭边界保护 + 放宽 allowed_roots 到非 C 盘，C:\\ 仍被 is_forbidden_root 拦。
+    let cfg_off = GuardConfig {
+        allowed_roots: vec![],
+        protect_c_drive_boundary: false,
+        reject_reparse_points: false,
+        extra_protected: Vec::new(),
+    };
+    let r2 = check_path(std::path::Path::new("C:\\"), &cfg_off);
+    assert_eq!(r2.verdict, Verdict::Block, "C 盘根始终被拦");
+}
+
+#[test]
 fn relative_path_is_blocked() {
     assert!(blocked("foo/bar"));
     assert!(blocked("..\\windows"));

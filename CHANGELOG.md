@@ -2,9 +2,32 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 风格。
 
+## [0.1.1] — 2026-09-23
+
+修复 issue #1 审查发现的「安全承诺与实现缺口」：破坏性操作不再依赖调用方自觉。
+
+### 安全（高危）
+- **execute 强制二次确认**：真删改为要求显式 `--commit`（弃用 `--dry-run=false` 反转式旗标）；不带 `--commit` 永不真删
+- **prompt 生效**：真删前按 scope 的 `Prompt::Confirm` 交互确认；非 TTY（管道/CI/Agent）一律拒绝
+
+### 安全（中危）
+- **Warn 强制拦截**：用户数据区（Documents/Desktop/Pictures 等）默认进 blocked，需 `--allow-warn` 才放行
+- **Delete 默认拒绝**：不可逆删除需 `--allow-delete`
+- **undo / restore**：新增 `scanary undo`（列出会话）与 `scanary restore <session_id>`（隔离项移回原位）；Recycle 提示回收站恢复，Delete 标注不可逆
+
+### 修复（低危）
+- `GuardConfig.protect_c_drive_boundary` 接上逻辑：拒绝以 C 盘根作为操作目标
+- `Plan.granularity` 生效：Directory 粒度真正影响回收行为
+- Quarantine `rename` 失败不再吞错：不计数、不写 undo、进失败列表
+- Recycle 改逐个删除：占用/锁定文件跳过，不再整批 abort（与 disclaimer 一致）
+- 文档测试数 155 → 164
+
+### 测试
+- **164 个测试全绿**，0 warning 0 error（原 156 + v0.1.1 修复 8）
+
 ## [0.1.0] — 2026-09-21
 
-首个完整版本：**阶段 0–5 全部完成，功能 15 项全覆盖，155 测试全绿**。
+首个完整版本：**阶段 0–5 全部完成，功能 15 项全覆盖，164 测试全绿**。
 
 ### 新增（核心引擎）
 - **wcs-scanner**：NTFS MFT 直读（全盘 ~4.8s）+ jwalk 降级；DirIndex 目录聚合；空间核算
@@ -50,4 +73,4 @@
 - 内存 ~170MB（NodeBudget 20 万节点）
 
 ### 测试
-- **155 个测试全绿**，0 warning 0 error
+- **164 个测试全绿**，0 warning 0 error

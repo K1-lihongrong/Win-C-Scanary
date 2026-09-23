@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-dedup"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -1420,7 +1420,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-executor"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1435,7 +1435,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-growth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1447,7 +1447,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-guard"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-inventory"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -1469,7 +1469,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-report"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1481,7 +1481,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-scaffold"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "globset",
@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "wcs-scanner"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "jwalk",

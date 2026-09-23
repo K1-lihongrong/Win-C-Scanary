@@ -217,10 +217,42 @@ fn delete_reports_freed_bytes() {
         granularity: Granularity::File,
         system_cmd: None,
     };
-    let result = execute(&plan, &test_guard(tmp.path()), false, &undo_log, &quarantine).unwrap();
+    // Delete 不可逆：需显式 allow_delete=true 才执行（M1 扩展）。
+    let result = wcs_executor::execute_with(
+        &plan,
+        &test_guard(tmp.path()),
+        false,
+        &undo_log,
+        &quarantine,
+        false,
+        true,
+    )
+    .unwrap();
     assert!(result.executed);
     assert_eq!(result.total_bytes, 5000);
     assert!(!f.exists());
+}
+
+#[test]
+fn delete_is_rejected_by_default() {
+    let tmp = tempfile::tempdir().unwrap();
+    let f = make_file(tmp.path(), "del-guard.tmp");
+    std::fs::write(&f, vec![0u8; 5000]).unwrap();
+    let undo_log = tmp.path().join("undo.jsonl");
+    let quarantine = tmp.path().join("q");
+
+    let plan = Plan {
+        action: Action::Delete,
+        paths: vec![f.clone()],
+        reason: "test".into(),
+        granularity: Granularity::File,
+        system_cmd: None,
+    };
+    // 兼容入口 execute()：allow_delete 默认 false
+    let result = execute(&plan, &test_guard(tmp.path()), false, &undo_log, &quarantine).unwrap();
+    assert!(f.exists(), "Delete 默认应被拒绝，文件必须还在");
+    assert_eq!(result.total_bytes, 0, "未执行则释放量为 0");
+    assert!(result.blocked.iter().any(|(_, r)| r.contains("不可逆")));
 }
 
 #[test]
@@ -267,6 +299,130 @@ fn prune_quarantine_removes_old_keeps_fresh() {
     assert!(!old_file.exists(), "旧项应被删");
     assert!(new_file.exists(), "新项应保留");
     assert!(weird.exists(), "无法解析时间戳的文件应保守保留");
+}
+
+#[test]
+fn warn_is_blocked_by_default_and_allowed_with_flag() {
+    let tmp = tempfile::tempdir().unwrap();
+    // 构造一个落在 USER_DATA_PATTERNS 的路径：.../Documents/note.txt
+    let docs = tmp.path().join("Documents");
+    std::fs::create_dir_all(&docs).unwrap();
+    let file = make_file(&docs, "note.txt");
+    let undo_log = tmp.path().join("undo.jsonl");
+    let quarantine = tmp.path().join("q");
+
+    let plan = Plan {
+        action: Action::Recycle,
+        paths: vec![file.clone()],
+        reason: "test".into(),
+        granularity: Granularity::File,
+        system_cmd: None,
+    };
+
+    // 默认：Warn 被拦截，文件必须还在
+    let r1 = execute(&plan, &test_guard(tmp.path()), false, &undo_log, &quarantine).unwrap();
+    assert!(file.exists(), "默认路径下 Warn 项不应被删除");
+    assert_eq!(r1.matched_count, 0);
+    assert!(r1.blocked.iter().any(|(_, s)| s.contains("allow-warn")));
+
+    // 显式放行：allow_warn=true，文件被回收
+    let r2 = wcs_executor::execute_with(
+        &plan,
+        &test_guard(tmp.path()),
+        false,
+        &undo_log,
+        &quarantine,
+        true,
+        false,
+    )
+    .unwrap();
+    assert!(!file.exists(), "allow_warn=true 时 Warn 项应被处理");
+    assert_eq!(r2.matched_count, 1);
+}
+
+#[test]
+fn quarantine_restore_roundtrip() {
+    let tmp = tempfile::tempdir().unwrap();
+    let file = make_file(tmp.path(), "to-q.txt");
+    let undo_log = tmp.path().join("undo.jsonl");
+    let quarantine = tmp.path().join("q");
+
+    let plan = Plan {
+        action: Action::Quarantine,
+        paths: vec![file.clone()],
+        reason: "test".into(),
+        granularity: Granularity::File,
+        system_cmd: None,
+    };
+    let r = execute(&plan, &test_guard(tmp.path()), false, &undo_log, &quarantine).unwrap();
+    assert!(!file.exists());
+
+    // 恢复该会话
+    let rr = wcs_executor::restore_session(&undo_log, &r.session_id).unwrap();
+    assert_eq!(rr.restored.len(), 1, "应恢复 1 项");
+    assert!(file.exists(), "恢复后原文件应回来");
+}
+
+#[test]
+fn restore_skips_delete_as_irreversible() {
+    let tmp = tempfile::tempdir().unwrap();
+    let f = make_file(tmp.path(), "gone.tmp");
+    let undo_log = tmp.path().join("undo.jsonl");
+    let quarantine = tmp.path().join("q");
+
+    let plan = Plan {
+        action: Action::Delete,
+        paths: vec![f],
+        reason: "test".into(),
+        granularity: Granularity::File,
+        system_cmd: None,
+    };
+    let r = wcs_executor::execute_with(
+        &plan,
+        &test_guard(tmp.path()),
+        false,
+        &undo_log,
+        &quarantine,
+        false,
+        true,
+    )
+    .unwrap();
+    let rr = wcs_executor::restore_session(&undo_log, &r.session_id).unwrap();
+    assert!(rr.restored.is_empty(), "Delete 项不可恢复");
+    assert!(rr.skipped.iter().any(|(_, s)| s.contains("不可逆")));
+}
+
+#[test]
+fn list_sessions_merges_and_skips_dry_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    let undo_log = tmp.path().join("undo.jsonl");
+    let quarantine = tmp.path().join("q");
+
+    // 一次 dry-run（应被跳过）
+    let f0 = make_file(tmp.path(), "dry.tmp");
+    let p0 = Plan {
+        action: Action::Recycle,
+        paths: vec![f0],
+        reason: "test".into(),
+        granularity: Granularity::File,
+        system_cmd: None,
+    };
+    execute(&p0, &test_guard(tmp.path()), true, &undo_log, &quarantine).unwrap();
+
+    // 一次真隔离（应出现）
+    let f1 = make_file(tmp.path(), "real.tmp");
+    let p1 = Plan {
+        action: Action::Quarantine,
+        paths: vec![f1],
+        reason: "test".into(),
+        granularity: Granularity::File,
+        system_cmd: None,
+    };
+    execute(&p1, &test_guard(tmp.path()), false, &undo_log, &quarantine).unwrap();
+
+    let sessions = wcs_executor::list_sessions(&undo_log).unwrap();
+    assert_eq!(sessions.len(), 1, "dry-run 会话应被跳过");
+    assert_eq!(sessions[0].count, 1);
 }
 
 #[test]

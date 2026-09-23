@@ -46,15 +46,24 @@ enum Commands {
         #[arg(long)]
         scope: Option<String>,
     },
-    /// 执行清理
+    /// 执行清理（默认 dry-run；真删需显式 --commit）
     Execute {
         rule_id: String,
         path: String,
         #[arg(long)]
         scope: Option<String>,
-        /// 默认 dry-run（true）；传 --dry-run=false 才真删
+        /// 兼容保留：默认 dry-run。真删必须用 --commit（此旗标不再能触发真删）
         #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
         dry_run: bool,
+        /// 真删确认旗标（H1）。不带此旗标永不真删；显式确认后才执行。
+        #[arg(long, default_value_t = false)]
+        commit: bool,
+        /// 放行用户数据区（Warn 项，M1）。默认拦截；需逐项确认时显式给出。
+        #[arg(long, default_value_t = false)]
+        allow_warn: bool,
+        /// 允许不可逆删除（Delete 动作）。默认拒绝。
+        #[arg(long, default_value_t = false)]
+        allow_delete: bool,
     },
     /// 生成报告
     Report { path: String },
@@ -123,6 +132,17 @@ enum Commands {
         #[arg(default_value = "C:\\")]
         path: String,
     },
+    /// 撤销：列出 undo 日志中的会话（可恢复项）
+    Undo {
+        /// 只显示某次会话的明细
+        #[arg(long)]
+        session: Option<String>,
+    },
+    /// 恢复：把某次隔离会话的项移回原位（Recycle 请用回收站，Delete 不可逆）
+    Restore {
+        /// 会话 id（来自 scanary undo）
+        session_id: String,
+    },
     /// 迁移指导：分析适合迁移到其他盘的大缓存目录，给出迁移命令（纯建议，不执行）
     Migrate {
         /// 要分析的卷/路径
@@ -166,9 +186,79 @@ fn elevate_command_for(is_admin: bool, exe: &str) -> Option<String> {
     }
 }
 
+/// H2：真删前按 scope 的 prompt 做交互确认。
+///
+/// - 目前只消费 `Prompt::Confirm`（唯一有规则在用的 kind）。
+/// - 无 prompt 或非 Confirm：视为无额外确认要求，返回 Ok。
+/// - 非 TTY（管道 / CI / Agent）：拒绝真删，返回 Err（安全不依赖自觉）。
+fn confirm_prompt(scope: &wcs_scaffold::Scope, matched: &[std::path::PathBuf]) -> Result<(), String> {
+    use std::io::IsTerminal;
+
+    let label = match &scope.prompt {
+        Some(wcs_scaffold::Prompt::Confirm { label }) => {
+            label.clone().unwrap_or_else(|| "确认执行清理？".to_string())
+        }
+        _ => return Ok(()), // 无 prompt / 非 Confirm：不拦截
+    };
+
+    // 非 TTY 一律拒绝：无法交互确认时不允许真删
+    if !std::io::stdin().is_terminal() {
+        return Err(format!(
+            "真删需交互确认，但当前非 TTY（管道/CI/Agent）。请人工在终端执行。提示: {}",
+            label
+        ));
+    }
+
+    eprintln!("将处理 {} 项，{} [y/N] ", matched.len(), label);
+    let mut line = String::new();
+    std::io::stdin()
+        .read_line(&mut line)
+        .map_err(|e| format!("读取确认输入失败: {}", e))?;
+    let ans = line.trim().to_lowercase();
+    if ans == "y" || ans == "yes" {
+        Ok(())
+    } else {
+        Err("用户未确认，已取消（默认 dry-run）。".to_string())
+    }
+}
+
+/// 测试辅助：构造一个最小 Scope（仅测试用）。
+#[cfg(test)]
+fn make_scope_for_test(prompt: Option<wcs_scaffold::Prompt>) -> wcs_scaffold::Scope {
+    wcs_scaffold::Scope {
+        id: "test".into(),
+        label: "test".into(),
+        glob: "*".into(),
+        mode: wcs_scaffold::Mode::Recycle,
+        prompt,
+        category: None,
+        variant: None,
+        recycle_granularity: wcs_scaffold::RecycleGranularity::File,
+    }
+}
+
 #[cfg(test)]
 mod perm_tests {
     use super::elevate_command_for;
+
+    #[test]
+    fn confirm_prompt_no_prompt_passes() {
+        let scope = super::make_scope_for_test(None);
+        assert!(super::confirm_prompt(&scope, &[]).is_ok(), "无 prompt 应放行");
+    }
+
+    #[test]
+    fn confirm_prompt_confirm_non_tty_is_rejected() {
+        use wcs_scaffold::Prompt;
+        let scope = super::make_scope_for_test(Some(Prompt::Confirm { label: None }));
+        // 测试环境 stdin 非 TTY：Confirm 必须拒绝真删
+        let r = super::confirm_prompt(&scope, &[]);
+        if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+            // 在真实 TTY 下跳过（无法自动化交互）
+            return;
+        }
+        assert!(r.is_err(), "非 TTY 下 Confirm 应拒绝");
+    }
 
     #[test]
     fn admin_needs_no_elevate() {
@@ -275,7 +365,7 @@ fn main() -> anyhow::Result<()> {
                 None => eprintln!("规则不存在: {}", rule_id),
             }
         }
-        Commands::Execute { rule_id, path, scope, dry_run } => {
+        Commands::Execute { rule_id, path, scope, dry_run: _, commit, allow_warn, allow_delete } => {
             let rules = wcs_scaffold::load_dir(&rules_dir)?;
             let rule = rules.iter().find(|r| &r.id == rule_id);
             match rule {
@@ -304,6 +394,26 @@ fn main() -> anyhow::Result<()> {
                             return Ok(());
                         }
                         let matched = wcs_scaffold::match_scope(s, root_path)?;
+
+                        // H1：真删只能由 --commit 触发（弃用 --dry-run=false 反转式旗标）。
+                        // --commit 未给出时永远 dry-run。
+                        let effective_dry_run = !*commit;
+
+                        // H2：真删前若 scope 有 prompt，按其 kind 交互确认。
+                        // 目前只实现 Confirm；非 TTY（管道/CI/Agent）一律拒绝。
+                        if !effective_dry_run {
+                            if let Err(msg) = confirm_prompt(s, &matched) {
+                                let out = serde_json::json!({
+                                    "rule_id": rule_id,
+                                    "root_path": path,
+                                    "executed": false,
+                                    "matched_count": matched.len(),
+                                    "message": msg,
+                                });
+                                println!("{}", serde_json::to_string_pretty(&out)?);
+                                return Ok(());
+                            }
+                        }
                         let action = match s.mode {
                             wcs_scaffold::Mode::Recycle => wcs_executor::Action::Recycle,
                             wcs_scaffold::Mode::Quarantine => wcs_executor::Action::Quarantine,
@@ -322,7 +432,16 @@ fn main() -> anyhow::Result<()> {
                         };
                         let undo = cli.undo_log.clone().unwrap_or_else(|| config_dir().join("undo.jsonl"));
                         let quar = cli.quarantine_root.clone().unwrap_or_else(|| config_dir().join("quarantine"));
-                        let result = wcs_executor::execute(&plan, &Default::default(), *dry_run, &undo, &quar)?;
+                        // M1：Warn / Delete 默认拦截，需显式 --allow-warn / --allow-delete。
+                        let result = wcs_executor::execute_with(
+                            &plan,
+                            &Default::default(),
+                            effective_dry_run,
+                            &undo,
+                            &quar,
+                            *allow_warn,
+                            *allow_delete,
+                        )?;
                         println!("{}", serde_json::to_string_pretty(&result)?);
                     }
                 }
@@ -656,6 +775,75 @@ fn main() -> anyhow::Result<()> {
                     println!("\n提示:");
                     for n in &advice.notes {
                         println!("  - {}", n);
+                    }
+                }
+            }
+        }
+        Commands::Undo { session } => {
+            let undo = cli
+                .undo_log
+                .clone()
+                .unwrap_or_else(|| config_dir().join("undo.jsonl"));
+            match session {
+                Some(sid) => {
+                    let entries = wcs_executor::read_undo_log(&undo)?;
+                    let mine: Vec<_> = entries
+                        .iter()
+                        .filter(|e| &e.session_id == sid)
+                        .collect();
+                    if mine.is_empty() {
+                        println!("会话 {} 无记录（日志: {}）", sid, undo.display());
+                    } else {
+                        println!("会话 {} 共 {} 项：", sid, mine.len());
+                        for e in mine {
+                            let dest = e
+                                .destination
+                                .as_ref()
+                                .map(|d| d.display().to_string())
+                                .unwrap_or_else(|| "-".into());
+                            println!("  [{:?}] {} → {}", e.action, e.source.display(), dest);
+                        }
+                    }
+                }
+                None => {
+                    let sessions = wcs_executor::list_sessions(&undo)?;
+                    println!("undo 日志: {}", undo.display());
+                    if sessions.is_empty() {
+                        println!("无可恢复会话（dry-run 不计入）。");
+                    } else {
+                        println!("共 {} 次会话（用 scanary restore <session_id> 恢复隔离项）：", sessions.len());
+                        for s in &sessions {
+                            println!(
+                                "  {}  [{:?}]  {} 项  {:.2} MB",
+                                s.session_id,
+                                s.action,
+                                s.count,
+                                s.total_bytes as f64 / 1e6
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Commands::Restore { session_id } => {
+            let undo = cli
+                .undo_log
+                .clone()
+                .unwrap_or_else(|| config_dir().join("undo.jsonl"));
+            let rr = wcs_executor::restore_session(&undo, session_id)?;
+            match cli.format {
+                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&rr)?),
+                OutputFormat::Pretty => {
+                    println!("恢复会话 {}", session_id);
+                    println!("已恢复 {} 项：", rr.restored.len());
+                    for (src, _dst) in &rr.restored {
+                        println!("  ✓ {}", src.display());
+                    }
+                    if !rr.skipped.is_empty() {
+                        println!("跳过 {} 项：", rr.skipped.len());
+                        for (p, why) in &rr.skipped {
+                            println!("  ✗ {} （{}）", p.display(), why);
+                        }
                     }
                 }
             }

@@ -29,7 +29,7 @@ scanary.exe --format pretty report "C:\"
 
 :: 预览 / 执行（默认 dry-run）
 scanary.exe preview system-temp "%TEMP%"
-scanary.exe execute system-temp "%TEMP%" --dry-run=false
+scanary.exe execute system-temp "%TEMP%" --commit
 ```
 
 > `--format` 须放在子命令**之前**。

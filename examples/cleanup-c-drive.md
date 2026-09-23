@@ -22,7 +22,7 @@ scanary --rules-dir rules preview system-temp "%TEMP%"
 # 5. 把命中项和可释放空间展示给用户，获确认
 
 # 6. 执行清理（默认 dry-run=true；确认后才 false）
-scanary --rules-dir rules execute system-temp "%TEMP%" --dry-run=false
+scanary --rules-dir rules execute system-temp "%TEMP%" --commit
 
 # 7. 复核释放量
 scanary --format pretty report "C:\"

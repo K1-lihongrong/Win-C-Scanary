@@ -55,7 +55,7 @@
 Warn 项会被放行执行（`execute` 内部对 Warn 记一条 `tracing::warn` 日志，但不阻止）。
 因此"用户数据区需确认"**依赖调用方/Agent 自觉遵守**，不能指望 executor 兜底。
 主要防线是：**默认 dry-run** + **预览先行** + SKILL.md 铁律"未经用户确认不真删"。
-Agent 遇到 Warn 项时必须**停下向用户确认**，不得直接 `--dry-run=false`。
+Agent 遇到 Warn 项时必须**停下向用户确认**；引擎默认拦截 Warn（需显式 `--allow-warn`）。
 
 ### 1.4 其他检查
 
@@ -122,7 +122,7 @@ Agent 遇到 Warn 项时必须**停下向用户确认**，不得直接 `--dry-ru
 ## 5. 给 Agent 的操作建议
 
 1. **清理前**：先 `preview`（dry-run），把命中项展示给用户。
-2. **执行时**：默认 `--dry-run=true`，用户确认后再 `--dry-run=false`。
+2. **执行时**：默认 dry-run；用户确认后再 `--commit`（真删前还会按 prompt 交互确认）。
 3. **Warn 项**：必须向用户解释影响，获得明确同意。
 4. **Block 项**：不要尝试绕过；报告"该路径受保护"。
 5. **新增规则**：glob 不得命中任何红线，且必须配 safety test（正向 + 红线断言）。

@@ -99,6 +99,10 @@ pub fn check_path(path: &Path, cfg: &GuardConfig) -> GuardResult {
     if !within_allowed_roots(path, cfg) {
         return block("超出允许操作范围");
     }
+    // L1：保护 C 盘边界——拒绝把 C 盘根本身作为操作目标（防整盘级误操作）。
+    if cfg.protect_c_drive_boundary && is_c_drive_root(path) {
+        return block("禁止以 C 盘根作为操作目标（protect_c_drive_boundary）");
+    }
     if cfg.reject_reparse_points && has_reparse_ancestor(path) {
         return block("祖先含 junction/符号链接");
     }
@@ -113,6 +117,13 @@ pub fn check_path(path: &Path, cfg: &GuardConfig) -> GuardResult {
 /// 批量校验
 pub fn check_paths(paths: &[PathBuf], cfg: &GuardConfig) -> Vec<GuardResult> {
     paths.iter().map(|p| check_path(p, cfg)).collect()
+}
+
+/// 是否为 C 盘根（`C:\` 或 `c:` 形式）。
+fn is_c_drive_root(path: &Path) -> bool {
+    let lower = path.to_string_lossy().to_lowercase();
+    let trimmed = lower.trim_end_matches('\\');
+    trimmed == "c:"
 }
 
 /// 是否为危险根（盘符根/系统根/用户根）

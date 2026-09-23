@@ -73,11 +73,12 @@ scanary --rules-dir rules preview system-temp "%TEMP%" --scope user-temp
 ## 5. 执行清理（execute）
 
 ```bash
-scanary --rules-dir rules execute <RULE_ID> <PATH> [--scope SCOPE_ID] [--dry-run <true|false>]
+scanary --rules-dir rules execute <RULE_ID> <PATH> [--scope SCOPE_ID] [--commit] [--allow-warn] [--allow-delete]
 ```
 
-- **默认 `--dry-run=true`**（只演示，不真删）。
-- 用户确认后才传 `--dry-run=false`。
+- **默认 dry-run**（只演示，不真删）。
+- 用户确认后才传 `--commit`（真删）。真删前会按规则 `prompt` 交互确认；非 TTY 拒绝。
+- `--allow-warn` 放行用户数据区；`--allow-delete` 允许不可逆删除（默认均拒绝）。
 - 执行前会先对 `PATH` 做 guard 校验；受保护路径会被 **Block**。
 - 默认回收站（`mode = "recycle"`），文件可恢复。
 - 输出每项释放量 `bytes_freed` 与总计 `total_bytes`。
@@ -86,11 +87,11 @@ scanary --rules-dir rules execute <RULE_ID> <PATH> [--scope SCOPE_ID] [--dry-run
 
 ```bash
 # 演示
-scanary --rules-dir rules execute system-temp "%TEMP%" --dry-run=true
+scanary --rules-dir rules execute system-temp "%TEMP%"
 # 真删（用户已确认）
-scanary --rules-dir rules execute system-temp "%TEMP%" --dry-run=false
+scanary --rules-dir rules execute system-temp "%TEMP%" --commit
 # 受保护路径应被 Block
-scanary --rules-dir rules execute system-temp "C:\Windows\System32" --dry-run=true
+scanary --rules-dir rules execute system-temp "C:\Windows\System32"
 ```
 
 ## 6. 重复文件检测（dedup）
@@ -250,7 +251,7 @@ permissions → scan → inspect → rules → preview → (用户确认) → ex
 2. `scan` + `inspect`：找到空间占用大头。
 3. `rules` + `preview`：看哪些规则能命中、能释放多少。
 4. 展示给用户，确认清理范围。
-5. `execute --dry-run=false`：回收站清理。
+5. `execute --commit`：回收站清理（真删）。
 6. `report`：看释放量与健康评分变化。
 
 > 高阶能力（可选，视用户意图）：`dedup`（查重）、`audit`（空间核算）、`snapshot`+`grow`（增长追踪）；
@@ -267,7 +268,9 @@ permissions → scan → inspect → rules → preview → (用户确认) → ex
 | `--top <N>` | scan | 最大条目数 |
 | `--samples <N>` | inspect | 样本数 |
 | `--scope <ID>` | preview/execute | 只处理指定 scope |
-| `--dry-run <bool>` | execute | 默认 true |
+| `--commit` | execute | 真删开关，默认 false（不带则永不真删） |
+| `--allow-warn` | execute | 放行用户数据区（Warn），默认 false |
+| `--allow-delete` | execute | 允许不可逆删除，默认 false |
 | `--min-size <N>` | dedup / snapshot | 忽略小于 N 字节的文件/目录 |
 | `--top <N>` | scan / audit / grow / migrate / uninstall | 列出/建议条数 |
 | `--keep <N>` | snapshot | 保留快照份数（默认 10） |

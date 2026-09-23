@@ -31,7 +31,7 @@ scanary --format pretty report "C:\"
 # 列出规则 / 预览 / 执行（默认 dry-run）
 scanary --rules-dir rules rules
 scanary --rules-dir rules preview system-temp "%TEMP%"
-scanary --rules-dir rules execute system-temp "%TEMP%" --dry-run=false
+scanary --rules-dir rules execute system-temp "%TEMP%" --commit
 
 # 薄 GUI
 scanary gui

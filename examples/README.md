@@ -8,4 +8,4 @@
 | [investigate-big-dir.md](investigate-big-dir.md) | 发现某个大目录，判断它是什么、能否清 |
 
 > CLI 名 `scanary`。全局参数 `--format pretty` 须放在子命令**之前**。
-> 破坏性操作默认 dry-run，确认后才 `--dry-run=false`。
+> 破坏性操作默认 dry-run，确认后才 `--commit`。

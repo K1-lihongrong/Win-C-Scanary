@@ -33,6 +33,8 @@ docs/MFT-MEMORY-ISSUE.md
 docs/VERIFICATION-RESULT.md
 docs/VERIFICATION-TASKS.md
 docs/archive/
+docs/GITHUB-PUSH-HANDOFF.md
+docs/REMEDIATION-ISSUE-1.md
 
 # 分发包（走 GitHub Release 附件，不进仓库）
 *.zip

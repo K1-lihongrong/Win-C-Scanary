@@ -423,12 +423,16 @@ fn api_execute(cfg: &GuiConfig, v: &serde_json::Value) -> Result<serde_json::Val
         },
         system_cmd: None,
     };
-    let result = wcs_executor::execute(
+    // M1：GUI 走 confirm 即视为显式放行 Warn 与 Delete（用户已在页面上二次确认）。
+    // 未 confirm（dry-run）时 allow_* 均为 false，Warn/Delete 仍被拦截。
+    let result = wcs_executor::execute_with(
         &plan,
         &Default::default(),
         dry_run,
         &cfg.undo_log,
         &cfg.quarantine_root,
+        confirm, // allow_warn：已确认才放行用户数据区
+        confirm, // allow_delete：已确认才允许不可逆删除
     )?;
     Ok(serde_json::to_value(&result)?)
 }
